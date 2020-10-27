@@ -1,0 +1,69 @@
+
+name: ROM Compiler
+
+on:
+#  release:
+#    types: [published]
+#  push:
+#    branches:
+#      - master
+#    paths:
+#      - '.config'
+#  schedule:
+#    - cron: 0 8 * * 5
+  watch:
+    types: [started]
+
+env:
+  ROM_MANIFEST:
+  ROM_MANIFEST_BRANCH:  
+  ROM_CODENAME: 
+  CODENAME: 
+  BRAND:
+  CHIPSET:  
+  DT_LINK: 
+  DT_BRANCH:
+  VT_LINK:
+  VT_BRANCH: 
+  KERNEL_LINK: 
+  KERNEL_BRANCH: 
+  TZ: Asia/Kolkata
+
+jobs:
+  build:
+    runs-on: ubuntu-16.04
+
+    steps:
+       - name: Checkout
+         uses: actions/checkout@master
+         
+       - name: Initializing environment
+         run: |
+            sudo -E apt-get -qq update
+            wget https://raw.githubusercontent.com/akhilnarang/scripts/master/setup/android_build_env.sh
+            bash android_build_env.sh
+            
+       - name: Sync ROM sourcecode
+         run: |
+             mkdir "$ROM_CODENAME$"
+             cd "$ROM_CODENAME$"
+             repo init -u $ROM_MANIFEST --depth=1 -b $ROM_MANIFEST_BRANCH 
+             repo sync -j4
+             
+       - name: Clone device tree, kernel tree and vendor tree
+         run: |
+             cd work
+             git clone $DT_LINK --depth=1 -b $DT_BRANCH device/"$BRAND"/"$CODENAME"
+             git clone $KERNEL_LINK --depth=1 -b $KERNEL_BRANCH kernel/"$BRAND"/"$CHIPSET"    
+             git clone $VT_LINK --depth=1 -b $VT_BRANCH vendor/"$BRAND"/"$CODENAME"
+             
+       - name: Build
+         run: |
+              cd work
+              source build/envsetup.sh && lunch "$ROM_CODENAME"_"$CODENAME"-userdebug && mka api-stubs-docs && mka hiddenapi-lists-docs && mka system-api-stubs-docs && mka test-api-stubs-docs && mka bacon -j4
+             
+       - name: Upload ROM
+         run: |
+              cd "$ROM_CODENAME$"/out/target/product/$CODENAME
+              curl -sL https://git.io/file-transfer | sh
+              ./transfer bit *$CODENAME*.zip    
